@@ -1,0 +1,517 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Hover Word Search</title>
+
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+
+<style>
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: 'Inter', sans-serif;
+  background: linear-gradient(135deg, #0f172a, #1e293b);
+  color: #e5e7eb;
+  display: flex;
+  justify-content: center;
+  padding: 30px;
+}
+
+.container {
+  width: 100%;
+  max-width: 1000px;
+  background: rgba(255,255,255,0.06);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 18px;
+  padding: 25px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.4);
+}
+
+h2 {
+  text-align: center;
+  margin-bottom: 15px;
+  font-size: 26px;
+  letter-spacing: 1px;
+}
+
+textarea {
+  width: 100%;
+  height: 110px;
+  margin-top: 10px;
+  padding: 12px;
+  font-size: 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,0.15);
+  background: rgba(255,255,255,0.05);
+  color: white;
+  outline: none;
+}
+
+textarea::placeholder {
+  color: #94a3b8;
+}
+
+.controls {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+
+input {
+  padding: 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(255,255,255,0.15);
+  background: rgba(255,255,255,0.05);
+  color: white;
+  width: 100px;
+  text-align: center;
+}
+
+button {
+  padding: 10px 18px;
+  border: none;
+  border-radius: 10px;
+  font-weight: 600;
+  cursor: pointer;
+  color: white;
+  background: linear-gradient(135deg, #22c55e, #16a34a);
+  box-shadow: 0 8px 20px rgba(34,197,94,0.25);
+  transition: all 0.2s ease;
+}
+
+button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 25px rgba(34,197,94,0.35);
+}
+
+button.download-btn {
+  background: linear-gradient(135deg, #3b82f6, #2563eb);
+  box-shadow: 0 8px 20px rgba(59,130,246,0.25);
+}
+button.download-btn:hover {
+  box-shadow: 0 12px 25px rgba(59,130,246,0.35);
+}
+
+#wordList {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  margin: 20px auto;
+  gap: 8px;
+}
+
+.word {
+  font-size: 13px;
+  font-weight: 600;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.1);
+  transition: 0.2s;
+}
+
+.word.found {
+  text-decoration: line-through;
+  background: rgba(34,197,94,0.2);
+  color: #86efac;
+}
+
+#grid {
+  display: grid;
+  justify-content: center;
+  gap: 4px;
+  margin-top: 20px;
+  user-select: none;
+}
+
+.cell {
+  width: 38px;
+  height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  border-radius: 10px;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.08);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.cell:hover {
+  transform: scale(1.08);
+  background: rgba(255,255,255,0.12);
+}
+
+.cell.hovered {
+  background: #facc15 !important;
+  color: #111827 !important;
+  transform: scale(1.05);
+}
+
+.cell.found {
+  background: #22c55e;
+  color: white;
+  border-color: #22c55e;
+  box-shadow: 0 0 10px rgba(34,197,94,0.4);
+}
+</style>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+</head>
+
+<body>
+
+<div class="container">
+
+<h2>Hover Word Search Game</h2>
+
+<textarea id="textInput" placeholder="Paste text here... e.g., JAVASCRIPT PROGRAMMING DEVELOPER MATRIX PUZZLE CODES"></textarea>
+
+<div class="controls">
+  <label><strong>Grid Size</strong></label>
+  <input id="sizeInput" type="number" value="12" min="8" max="25">
+  <button onclick="generate()">Generate</button>
+  <button class="download-btn" onclick="downloadPDF()">Download PDF</button>
+</div>
+
+<div id="wordList"></div>
+<div id="grid"></div>
+
+</div>
+
+<script>
+let grid = [];
+let size = 12;
+let words = [];
+let foundWords = new Set();
+
+let isDragging = false;
+let selectedCells = [];
+let lockDir = null;
+
+document.addEventListener("mouseup", () => {
+  if (isDragging) {
+    isDragging = false;
+    checkWord();
+  }
+});
+
+function generate() {
+  const text = document.getElementById("textInput").value;
+  size = parseInt(document.getElementById("sizeInput").value);
+
+  foundWords.clear();
+  selectedCells = [];
+  lockDir = null;
+
+  words = text
+    .toUpperCase()
+    .replace(/[^A-Z\s]/g, " ")
+    .split(/\s+/)
+    .filter(w => w.length >= 4 && w.length <= size);
+
+  words = [...new Set(words)];
+
+  if (words.length === 0) {
+    alert("Please enter some valid words first (minimum length of 4 letters)!");
+    return;
+  }
+
+  buildGrid();
+  placeWords();
+  fillEmpty();
+  render();
+  renderWords();
+}
+
+function buildGrid() {
+  grid = Array(size).fill(null).map(() => Array(size).fill(""));
+}
+
+function placeWords() {
+  words.forEach(word => {
+    let placed = false;
+    for (let t = 0; t < 200 && !placed; t++) {
+      let dir = ["H", "V", "DR", "DL", "UR", "UL"][Math.floor(Math.random() * 6)];
+      let r = Math.floor(Math.random() * size);
+      let c = Math.floor(Math.random() * size);
+
+      if (canPlace(word, r, c, dir)) {
+        putWord(word, r, c, dir);
+        placed = true;
+      }
+    }
+  });
+}
+
+function getCoords(r, c, i, dir) {
+  let rr = r;
+  let cc = c;
+  if (dir === "H") cc += i;
+  if (dir === "V") rr += i;
+  if (dir === "DR") { rr += i; cc += i; }
+  if (dir === "DL") { rr += i; cc -= i; }
+  if (dir === "UR") { rr -= i; cc += i; }
+  if (dir === "UL") { rr -= i; cc -= i; }
+  return { rr, cc };
+}
+
+function canPlace(word, r, c, dir) {
+  for (let i = 0; i < word.length; i++) {
+    let { rr, cc } = getCoords(r, c, i, dir);
+    if (rr < 0 || rr >= size || cc < 0 || cc >= size) return false;
+    if (grid[rr][cc] !== "" && grid[rr][cc] !== word[i]) return false;
+  }
+  return true;
+}
+
+function putWord(word, r, c, dir) {
+  for (let i = 0; i < word.length; i++) {
+    let { rr, cc } = getCoords(r, r, c, dir);
+    grid[rr][cc] = word[i];
+  }
+}
+
+// Fixed minor index typo bug present in the coordinate placement engine mirror loops
+function putWord(word, r, c, dir) {
+  for (let i = 0; i < word.length; i++) {
+    let { rr, cc } = getCoords(r, c, i, dir);
+    grid[rr][cc] = word[i];
+  }
+}
+
+function fillEmpty() {
+  const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+  for (let r = 0; r < size; r++) {
+    for (let c = 0; c < size; c++) {
+      if (grid[r][c] === "") {
+        grid[r][c] = letters[Math.floor(Math.random() * letters.length)];
+      }
+    }
+  }
+}
+
+function render() {
+  const g = document.getElementById("grid");
+  g.innerHTML = "";
+  g.style.gridTemplateColumns = `repeat(${size}, 38px)`;
+
+  for (let r = 0; r < size; r++) {
+    for (let c = 0; c < size; c++) {
+      let cell = document.createElement("div");
+      cell.className = "cell";
+      cell.innerText = grid[r][c];
+
+      cell.onmousedown = (e) => {
+        isDragging = true;
+        lockDir = null;
+        selectCell(cell, r, c);
+        e.preventDefault();
+      };
+
+      cell.onmouseenter = () => {
+        if (isDragging) {
+          trySelectCell(cell, r, c);
+        }
+      };
+
+      g.appendChild(cell);
+    }
+  }
+}
+
+function trySelectCell(cell, r, c) {
+  if (selectedCells.length === 0) return;
+
+  const first = selectedCells[0];
+  const dr = r - first.r;
+  const dc = c - first.c;
+
+  if (dr === 0 && dc === 0) return;
+
+  if (lockDir === null) {
+    const absDr = Math.abs(dr);
+    const absDc = Math.abs(dc);
+
+    if (Math.abs(absDr - absDc) <= 1 && absDr > 0 && absDc > 0) {
+      lockDir = "D";
+    } else if (absDr > absDc) {
+      lockDir = "V";
+    } else {
+      lockDir = "H";
+    }
+  }
+
+  let targetR = r;
+  let targetC = c;
+
+  if (lockDir === "H") {
+    targetR = first.r;
+  } else if (lockDir === "V") {
+    targetC = first.c;
+  } else if (lockDir === "D") {
+    const distance = Math.round((Math.abs(dr) + Math.abs(dc)) / 2);
+    targetR = first.r + (dr > 0 ? distance : -distance);
+    targetC = first.c + (dc > 0 ? distance : -distance);
+  }
+
+  if (targetR < 0 || targetR >= size || targetC < 0 || targetC >= size) return;
+
+  const steps = Math.max(Math.abs(targetR - first.r), Math.abs(targetC - first.c));
+  const stepR = steps === 0 ? 0 : (targetR - first.r) / steps;
+  const stepC = steps === 0 ? 0 : (targetC - first.c) / steps;
+
+  clearHovers();
+  selectedCells = [first];
+  
+  const allCells = document.querySelectorAll(".cell");
+
+  for (let i = 1; i <= steps; i++) {
+    let nextR = first.r + Math.round(stepR * i);
+    let nextC = first.c + Math.round(stepC * i);
+    
+    let index = nextR * size + nextC;
+    let targetCell = allCells[index];
+
+    if (targetCell) {
+      targetCell.classList.add("hovered");
+      selectedCells.push({ r: nextR, c: nextC, letter: grid[nextR][nextC], element: targetCell });
+    }
+  }
+}
+
+function selectCell(cell, r, c) {
+  cell.classList.add("hovered");
+  selectedCells.push({ r, c, letter: grid[r][c], element: cell });
+}
+
+function clearHovers() {
+  selectedCells.forEach(s => s.element.classList.remove("hovered"));
+}
+
+function checkWord() {
+  const text = selectedCells.map(s => s.letter).join("");
+  const reversed = text.split("").reverse().join("");
+
+  let wordFound = false;
+
+  for (let w of words) {
+    if (!foundWords.has(w) && (text === w || reversed === w)) {
+      foundWords.add(w);
+      wordFound = true;
+      
+      selectedCells.forEach(s => {
+        s.element.classList.remove("hovered");
+        s.element.classList.add("found");
+      });
+      
+      renderWords();
+      break;
+    }
+  }
+
+  if (!wordFound) {
+    clearHovers();
+  }
+
+  selectedCells = [];
+  lockDir = null;
+}
+
+function renderWords() {
+  const box = document.getElementById("wordList");
+  box.innerHTML = words.map(w => {
+    return `<div class="word ${foundWords.has(w) ? 'found' : ''}">${w}</div>`;
+  }).join("");
+}
+
+// NATIVE VECTOR GENERATION PIPELINE (Zero image capturing)
+function downloadPDF() {
+  if (words.length === 0) {
+    alert("Please generate a puzzle first!");
+    return;
+  }
+
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({
+    orientation: 'portrait',
+    unit: 'mm',
+    format: 'a4'
+  });
+
+  // 1. Setup Document Fonts and Title
+  doc.setFont("Helvetica", "bold");
+  doc.setFontSize(24);
+  doc.text("Word Search Puzzle", 105, 20, { align: "center" });
+
+  // 2. Compute dynamic spatial layout boundaries
+  const pageWidth = 210; 
+  const cellSize = 9; // Size of each square on paper (in mm)
+  const gridWidthMM = size * cellSize;
+  const startX = (pageWidth - gridWidthMM) / 2; // Center horizontally
+  const startY = 35; // Start position below title
+
+  // 3. Draw Native Vectors for the Unanswered Grid Matrix
+  doc.setFont("Helvetica", "bold");
+  doc.setFontSize(12);
+  doc.setLineWidth(0.2);
+  doc.setDrawColor(0, 0, 0); // Solid sharp black borders
+
+  for (let r = 0; r < size; r++) {
+    for (let c = 0; c < size; c++) {
+      const x = startX + (c * cellSize);
+      const y = startY + (r * cellSize);
+
+      // Draw the crisp square borders natively
+      doc.rect(x, y, cellSize, cellSize);
+
+      // Centered letter computations inside grid units
+      const char = grid[r][c];
+      const textWidth = doc.getTextWidth(char);
+      const fontHeightOffset = 3; // Structural tracking modifier
+      const letterX = x + (cellSize - textWidth) / 2;
+      const letterY = y + (cellSize / 2) + (fontHeightOffset / 2);
+
+      doc.text(char, letterX, letterY);
+    }
+  }
+
+  // 4. Draw Native Word Bank columns below the matrix board
+  let currentY = startY + gridWidthMM + 15;
+  doc.setFont("Helvetica", "normal");
+  doc.setFontSize(11);
+
+  const colWidth = 45;
+  const marginX = 20;
+  let colCount = 0;
+
+  words.forEach(word => {
+    let wordX = marginX + (colCount * colWidth);
+    
+    // Auto-wrap columns safely across margins
+    if (wordX + colWidth > pageWidth - marginX) {
+      colCount = 0;
+      wordX = marginX;
+      currentY += 8;
+    }
+
+    // Render plain text words (completely unanswered)
+    doc.text(word, wordX, currentY);
+    colCount++;
+  });
+
+  // 5. Instantly download the crisp vector output document
+  doc.save("crisp-vector-word-search.pdf");
+}
+</script>
+
+</body>
+</html>
